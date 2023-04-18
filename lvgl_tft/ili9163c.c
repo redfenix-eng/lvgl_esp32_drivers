@@ -9,7 +9,6 @@
 #include "ili9163c.h"
 #include "disp_spi.h"
 #include "driver/gpio.h"
-#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "assert.h"
@@ -17,8 +16,6 @@
 /*********************
  *      DEFINES
  *********************/
-#define TAG "ILI9163C"
-
 // ILI9163C specific commands used in init
 #define ILI9163C_NOP 0x00
 #define ILI9163C_SWRESET 0x01
@@ -69,7 +66,7 @@
 
 #define ST77XX_MADCTL_MY 0x80
 #define ST77XX_MADCTL_MX 0x40
-#define ST77XX_MADCTL_MV 0x20 #define
+#define ST77XX_MADCTL_MV 0x20
 #define ST77XX_MADCTL_ML 0x10
 #define ST77XX_MADCTL_RGB 0x00
 #define ST77XX_MADCTL_BGR 0x08
@@ -94,7 +91,7 @@ static void ili9163c_set_orientation(uint8_t orientation);
 static void ili9163c_send_cmd(uint8_t cmd);
 static void ili9163c_send_data(void *data, uint16_t length);
 static void ili9163c_send_color(void *data, uint16_t length);
-
+static void ili9163c_reset(void);
 /**********************
  *  STATIC VARIABLES
  **********************/
@@ -109,7 +106,7 @@ static void ili9163c_send_color(void *data, uint16_t length);
 
 void ili9163c_init(void)
 {
-	ESP_LOGD(TAG, "Init");
+	LV_LOG_INFO("Init");
 
 	lcd_init_cmd_t ili_init_cmds[] = {
 		{ILI9163C_SWRESET, {0}, 0x80},		 // Software reset, 0 args, w/delay 120ms
@@ -136,18 +133,8 @@ void ili9163c_init(void)
 		{ILI9163C_DISPON, {0}, 0x80},																						// Main screen turn on, no args w/delay 100 ms delay
 		{0, {0}, 0xff}
 	};
-
-	//Initialize non-SPI GPIOs
-	gpio_pad_select_gpio(ILI9163C_DC);
-	gpio_set_direction(ILI9163C_DC, GPIO_MODE_OUTPUT);
-	gpio_pad_select_gpio(ILI9163C_RST);
-	gpio_set_direction(ILI9163C_RST, GPIO_MODE_OUTPUT);
-
-	//Reset the display
-	gpio_set_level(ILI9163C_RST, 0);
-	vTaskDelay(100 / portTICK_RATE_MS);
-	gpio_set_level(ILI9163C_RST, 1);
-	vTaskDelay(150 / portTICK_RATE_MS);
+ 
+        ili9163c_reset();
 
 	//Send all the commands
 	uint16_t cmd = 0;
@@ -157,7 +144,7 @@ void ili9163c_init(void)
 		ili9163c_send_data(ili_init_cmds[cmd].data, ili_init_cmds[cmd].databytes & 0x1F);
 		if (ili_init_cmds[cmd].databytes & 0x80)
 		{
-			vTaskDelay(150 / portTICK_RATE_MS);
+			vTaskDelay(pdMS_TO_TICKS(150));
 		}
 		cmd++;
 	}
@@ -236,13 +223,25 @@ static void ili9163c_set_orientation(uint8_t orientation)
 {
 	assert(orientation < 4);
 
+#if (LV_USE_LOG == 1)
 	const char *orientation_str[] = {
 		"PORTRAIT", "PORTRAIT_INVERTED", "LANDSCAPE", "LANDSCAPE_INVERTED"};
 
-	ESP_LOGD(TAG, "Display orientation: %s", orientation_str[orientation]);
-
+	LV_LOG_INFO("Display orientation: %s", orientation_str[orientation]);
+#endif
 	uint8_t data[] = {0x48, 0x88, 0xA8, 0x68};
 
 	ili9163c_send_cmd(ILI9163C_MADCTL);
 	ili9163c_send_data((void *)&data[orientation], 1);
+}
+
+static void ili9163c_reset(void)
+{
+#if CONFIG_LV_DISP_USE_RST
+    gpio_set_level(ILI9163C_RST, 0);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    gpio_set_level(ILI9163C_RST, 1);
+    vTaskDelay(pdMS_TO_TICKS(150));
+#else
+#endif
 }
