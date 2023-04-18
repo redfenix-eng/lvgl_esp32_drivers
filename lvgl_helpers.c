@@ -18,7 +18,7 @@
 
 #include "driver/i2c.h"
 
-#include "lvgl/src/lv_core/lv_refr.h"
+#include "lvgl/src/core/lv_refr.h"
 
 /*********************
  *      DEFINES
